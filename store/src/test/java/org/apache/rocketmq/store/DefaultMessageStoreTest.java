@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -48,10 +49,12 @@ import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageExtBatch;
 import org.apache.rocketmq.common.message.MessageExtBrokerInner;
+import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.config.FlushDiskType;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.config.StorePathConfigHelper;
+import org.apache.rocketmq.store.exception.ConsumeQueueException;
 import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
 import org.apache.rocketmq.store.queue.CqUnit;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
@@ -372,7 +375,7 @@ public class DefaultMessageStoreTest {
     }
 
     @Test
-    public void testPutMessage_whenMessagePropertyIsTooLong() {
+    public void testPutMessage_whenMessagePropertyIsTooLong() throws ConsumeQueueException {
         String topicName = "messagePropertyIsTooLongTest";
         MessageExtBrokerInner illegalMessage = buildSpecifyLengthPropertyMessage("123".getBytes(StandardCharsets.UTF_8), topicName, Short.MAX_VALUE + 1);
         assertEquals(messageStore.putMessage(illegalMessage).getPutMessageStatus(), PutMessageStatus.PROPERTIES_SIZE_EXCEEDED);
@@ -426,9 +429,10 @@ public class DefaultMessageStoreTest {
 
     private long getStoreTime(CqUnit cqUnit) {
         try {
-            Method getStoreTime = getDefaultMessageStore().getClass().getDeclaredMethod("getStoreTime", CqUnit.class);
+            Class abstractConsumeQueueStore = getDefaultMessageStore().getQueueStore().getClass().getSuperclass();
+            Method getStoreTime = abstractConsumeQueueStore.getDeclaredMethod("getStoreTime", CqUnit.class);
             getStoreTime.setAccessible(true);
-            return (long) getStoreTime.invoke(getDefaultMessageStore(), cqUnit);
+            return (long) getStoreTime.invoke(getDefaultMessageStore().getQueueStore(), cqUnit);
         } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
@@ -536,7 +540,7 @@ public class DefaultMessageStoreTest {
     }
 
     @Test
-    public void testMaxOffset() throws InterruptedException {
+    public void testMaxOffset() throws InterruptedException, ConsumeQueueException {
         int firstBatchMessages = 3;
         int queueId = 0;
         messageBody = storeMessage.getBytes();
@@ -939,6 +943,15 @@ public class DefaultMessageStoreTest {
         messageStore.cleanUnusedTopic(resultSet);
         Assert.assertEquals(consumeQueueTable.size(), 2);
         Assert.assertEquals(resultSet, consumeQueueTable.keySet());
+    }
+
+    @Test
+    public void testChangeStoreConfig() {
+        Properties properties = new Properties();
+        properties.setProperty("enableBatchPush", "true");
+        MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
+        MixAll.properties2Object(properties, messageStoreConfig);
+        assertThat(messageStoreConfig.isEnableBatchPush()).isTrue();
     }
 
     private class MyMessageArrivingListener implements MessageArrivingListener {
