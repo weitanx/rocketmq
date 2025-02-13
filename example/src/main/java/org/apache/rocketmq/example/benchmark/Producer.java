@@ -82,12 +82,13 @@ public class Producer {
         final boolean asyncEnable = commandLine.hasOption('y') && Boolean.parseBoolean(commandLine.getOptionValue('y'));
         final int threadCount = asyncEnable ? 1 : commandLine.hasOption('w') ? Integer.parseInt(commandLine.getOptionValue('w')) : 64;
         final boolean enableCompress = commandLine.hasOption('c') && Boolean.parseBoolean(commandLine.getOptionValue('c'));
+        final int reportInterval = commandLine.hasOption("ri") ? Integer.parseInt(commandLine.getOptionValue("ri")) : 10000;
 
         System.out.printf("topic: %s, threadCount: %d, messageSize: %d, keyEnable: %s, propertySize: %d, tagCount: %d, " +
                 "traceEnable: %s, aclEnable: %s, messageQuantity: %d, delayEnable: %s, delayLevel: %s, " +
-                "asyncEnable: %s%n compressEnable: %s%n",
+                "asyncEnable: %s%n compressEnable: %s, reportInterval: %d%n",
             topic, threadCount, messageSize, keyEnable, propertySize, tagCount, msgTraceEnable, aclEnable, messageNum,
-            delayEnable, delayLevel, asyncEnable, enableCompress);
+            delayEnable, delayLevel, asyncEnable, enableCompress, reportInterval);
 
         StringBuilder sb = new StringBuilder(messageSize);
         for (int i = 0; i < messageSize; i++) {
@@ -139,7 +140,7 @@ public class Producer {
                     e.printStackTrace();
                 }
             }
-        }, 10000, 10000, TimeUnit.MILLISECONDS);
+        }, reportInterval, reportInterval, TimeUnit.MILLISECONDS);
 
         RPCHook rpcHook = null;
         if (aclEnable) {
@@ -159,8 +160,8 @@ public class Producer {
             String compressType = commandLine.hasOption("ct") ? commandLine.getOptionValue("ct").trim() : "ZLIB";
             int compressLevel = commandLine.hasOption("cl") ? Integer.parseInt(commandLine.getOptionValue("cl")) : 5;
             int compressOverHowMuch = commandLine.hasOption("ch") ? Integer.parseInt(commandLine.getOptionValue("ch")) : 4096;
-            producer.getDefaultMQProducerImpl().setCompressType(CompressionType.of(compressType));
-            producer.getDefaultMQProducerImpl().setCompressLevel(compressLevel);
+            producer.setCompressType(CompressionType.of(compressType));
+            producer.setCompressLevel(compressLevel);
             producer.setCompressMsgBodyOverHowmuch(compressOverHowMuch);
             System.out.printf("compressType: %s compressLevel: %s%n", compressType, compressLevel);
         } else {
@@ -367,6 +368,10 @@ public class Producer {
         options.addOption(opt);
 
         opt = new Option("ch", "compressOverHowMuch", true, "Compress message when body over how much(unit Byte), Default: 4096");
+        opt.setRequired(false);
+        options.addOption(opt);
+
+        opt = new Option("ri", "reportInterval", true, "The number of ms between reports, Default: 10000");
         opt.setRequired(false);
         options.addOption(opt);
 
